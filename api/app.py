@@ -61,8 +61,7 @@ def predict(news: str):
     last_sequence = scaled_data[-window_size:]
     last_sequence = np.reshape(last_sequence, (1, window_size, 1))
 
-    lstm_pred = lstm_model.predict(last_sequence)[0][0]
-    lstm_pred = scaler.inverse_transform([[lstm_pred]])[0][0]
+    lstm_pred = 0  # temporary placeholder
 
     # ======================
     # Sentiment
@@ -73,9 +72,8 @@ def predict(news: str):
     # Ensemble
     # ======================
     final_prediction = (
-        0.4 * xgb_pred +
-        0.4 * lstm_pred +
-        0.2 * sentiment_score
+    0.7 * xgb_pred +
+    0.3 * sentiment_score
     )
 
     return {
