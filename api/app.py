@@ -4,7 +4,7 @@ import numpy as np
 import joblib
 import sys
 import os
-from tensorflow.keras.models import load_model
+
 
 # 🔥 Fix module path (VERY IMPORTANT)
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -17,7 +17,7 @@ app = FastAPI()
 # 🔹 Load Models (once)
 # ======================
 xgb_model = joblib.load("models/xgboost_model.pkl")
-lstm_model = load_model("models/lstm_model.h5", compile=False)
+lstm_prediction = 0  # temporary placeholder
 scaler = joblib.load("models/lstm_scaler.pkl")
 
 # ======================
