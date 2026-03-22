@@ -1,10 +1,8 @@
-from transformers import pipeline
 
-# Load FinBERT model
-sentiment_model = pipeline(
-    "sentiment-analysis",
-    model="ProsusAI/finbert"
-)
+from textblob import TextBlob
+
+def get_sentiment(text):
+    return TextBlob(text).sentiment.polarity
 
 def get_sentiment_score(text):
     result = sentiment_model(text)[0]
