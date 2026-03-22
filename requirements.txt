@@ -8,3 +8,4 @@ joblib
 requests
 transformers
 torch
+textblob==0.19.0
