@@ -63,6 +63,19 @@ st.markdown("## 🧠 AI Prediction")
 news = st.text_input("Enter Tesla news:")
 
 # ======================
+# 🎛️ User Controls
+# ======================
+st.markdown("### ⚙️ Prediction Controls")
+
+col1, col2 = st.columns(2)
+
+with col1:
+    days = st.slider("📅 Days to Predict", 1, 30, 7)
+
+with col2:
+    selected_date = st.date_input("📆 Select Start Date")
+    
+# ======================
 # 🔮 Prediction
 # ======================
 if st.button("Predict"):
