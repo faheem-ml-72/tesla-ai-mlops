@@ -5,8 +5,7 @@ import joblib
 import sys
 import os
 
-
-# 🔥 Fix module path (VERY IMPORTANT)
+# Fix path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from utils.sentiment import get_sentiment_score
@@ -14,11 +13,15 @@ from utils.sentiment import get_sentiment_score
 app = FastAPI()
 
 # ======================
-# 🔹 Load Models (once)
+# 🔹 Lazy Load Model
 # ======================
-xgb_model = joblib.load("models/xgboost_model.pkl")
-lstm_prediction = 0  # temporary placeholder
-scaler = joblib.load("models/lstm_scaler.pkl")
+model = None
+
+def get_model():
+    global model
+    if model is None:
+        model = joblib.load("models/xgboost_model.pkl")
+    return model
 
 # ======================
 # 🔹 Features
@@ -35,12 +38,14 @@ FEATURES = [
 def home():
     return {"message": "Tesla AI MLOps API is running 🚀"}
 
-
 # ======================
 # 🔹 Prediction Endpoint
 # ======================
 @app.post("/predict")
 def predict(news: str):
+
+    # Load model (lazy)
+    model = get_model()
 
     # Load latest data
     df = pd.read_csv("data/tesla_features.csv", index_col=0)
@@ -49,19 +54,7 @@ def predict(news: str):
     # XGBoost Prediction
     # ======================
     x_input = df[FEATURES].iloc[-1:].values
-    xgb_pred = xgb_model.predict(x_input)[0]
-
-    # ======================
-    # LSTM Prediction
-    # ======================
-    close_data = df[['Close']].values
-    scaled_data = scaler.transform(close_data)
-
-    window_size = 60
-    last_sequence = scaled_data[-window_size:]
-    last_sequence = np.reshape(last_sequence, (1, window_size, 1))
-
-    lstm_pred = 0  # temporary placeholder
+    xgb_pred = model.predict(x_input)[0]
 
     # ======================
     # Sentiment
@@ -72,13 +65,13 @@ def predict(news: str):
     # Ensemble
     # ======================
     final_prediction = (
-    0.7 * xgb_pred +
-    0.3 * sentiment_score
+        0.7 * xgb_pred +
+        0.3 * sentiment_score
     )
 
     return {
         "xgboost_prediction": float(xgb_pred),
-        "lstm_prediction": float(lstm_pred),
+        "lstm_prediction": 0.0,  # placeholder
         "sentiment_score": float(sentiment_score),
         "final_prediction": float(final_prediction)
     }
