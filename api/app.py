@@ -6,7 +6,6 @@ import joblib
 import sys
 import os
 
-
 # Fix path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
@@ -49,17 +48,17 @@ def predict(news: str):
     # Load model
     model = get_model()
 
-    # Load data
+    # Load latest data
     df = pd.read_csv("data/tesla_features.csv", index_col=0)
 
     # ======================
-    # XGBoost Prediction
+    # 📊 XGBoost Prediction
     # ======================
     x_input = df[FEATURES].iloc[-1:].values
     xgb_pred = model.predict(x_input)[0]
 
     # ======================
-    # 📈 Future Prediction (7 days using GP)
+    # 📈 Gaussian Process (Future 7 Days)
     # ======================
     close_prices = df['Close'].values[-100:]
 
@@ -74,35 +73,25 @@ def predict(news: str):
 
     gp_preds, gp_std = gp.predict(future_x, return_std=True)
 
-    future_prices = gp_preds.tolist()
+    future_prices = gp_preds.tolist()       # ✅ REAL values (no scaling)
     uncertainty = gp_std.tolist()
 
     # ======================
-    # Single GP Prediction (next step)
-    # ======================
-    gp_pred = gp_preds[0]
-
-    # ======================
-    # LSTM (placeholder)
-    # ======================
-    lstm_pred = 0.0
-
-    # ======================
-    # Sentiment
+    # 🧠 Sentiment
     # ======================
     sentiment_score = get_sentiment_score(news)
 
     # ======================
-    # Ensemble
+    # 🚀 Final Ensemble
     # ======================
     final_prediction = (
-        0.5 * xgb_pred +
-        0.3 * sentiment_score +
-        0.2 * gp_pred
+        0.6 * xgb_pred +
+        0.2 * sentiment_score +
+        0.2 * np.mean(gp_preds)   # use average future trend
     )
 
     # ======================
-    # Response
+    # 📤 Response
     # ======================
     return {
         "xgboost_prediction": float(xgb_pred),
