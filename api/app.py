@@ -45,10 +45,10 @@ def home():
 @app.post("/predict")
 def predict(news: str):
 
-    # Load model (lazy)
+    # Load model
     model = get_model()
 
-    # Load latest data
+    # Load data
     df = pd.read_csv("data/tesla_features.csv", index_col=0)
 
     # ======================
@@ -58,7 +58,7 @@ def predict(news: str):
     xgb_pred = model.predict(x_input)[0]
 
     # ======================
-    # Gaussian Process
+    # 📈 Future Prediction (7 days using GP)
     # ======================
     close_prices = df['Close'].values[-100:]
 
@@ -68,14 +68,21 @@ def predict(news: str):
     gp = GaussianProcessRegressor()
     gp.fit(X, y)
 
-    future_x = np.array([[len(close_prices)]])
-    gp_pred, gp_std = gp.predict(future_x, return_std=True)
+    future_steps = 7
+    future_x = np.arange(len(close_prices), len(close_prices) + future_steps).reshape(-1, 1)
 
-    gp_pred = gp_pred[0]
-    gp_uncertainty = gp_std[0]
+    gp_preds, gp_std = gp.predict(future_x, return_std=True)
+
+    future_prices = gp_preds.tolist()
+    uncertainty = gp_std.tolist()
 
     # ======================
-    # LSTM (temporary placeholder)
+    # Single GP Prediction (next step)
+    # ======================
+    gp_pred = gp_preds[0]
+
+    # ======================
+    # LSTM (placeholder)
     # ======================
     lstm_pred = 0.0
 
@@ -93,11 +100,13 @@ def predict(news: str):
         0.2 * gp_pred
     )
 
+    # ======================
+    # Response
+    # ======================
     return {
         "xgboost_prediction": float(xgb_pred),
-        "lstm_prediction": float(lstm_pred),
         "sentiment_score": float(sentiment_score),
-        "gp_prediction": float(gp_pred),
-        "gp_uncertainty": float(gp_uncertainty),
+        "future_prices": future_prices,
+        "uncertainty": uncertainty,
         "final_prediction": float(final_prediction)
     }

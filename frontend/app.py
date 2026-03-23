@@ -1,6 +1,8 @@
 import streamlit as st
 import requests
 import yfinance as yf
+import pandas as pd
+import numpy as np
 
 # ======================
 # 🎨 Styling
@@ -44,6 +46,12 @@ data_chart = yf.download("TSLA", period="1mo")
 st.markdown("## 📈 Tesla Stock Price")
 st.line_chart(data_chart["Close"])
 
+# KPI
+col1, col2, col3 = st.columns(3)
+col1.metric("💰 Price", round(data_chart["Close"].iloc[-1], 2))
+col2.metric("📈 Daily Change %", round(data_chart["Close"].pct_change().iloc[-1]*100, 2))
+col3.metric("📊 Volume", int(data_chart["Volume"].iloc[-1]))
+
 # ======================
 # 🔍 Input
 # ======================
@@ -62,36 +70,54 @@ if st.button("Predict"):
             response = requests.post(url, params={"news": news})
             data = response.json()
 
+            # ======================
+            # 📈 Combined Forecast Graph
+            # ======================
+            past_df = data_chart["Close"].tail(30)
+
+            future_prices = data["future_prices"]
+            future_dates = pd.date_range(start=data_chart.index[-1], periods=8)[1:]
+
+            future_df = pd.Series(future_prices, index=future_dates)
+
+            combined = pd.concat([past_df, future_df])
+
+            st.markdown("## 📈 Price Forecast (Past + Future)")
+            st.line_chart(combined)
+
+            # ======================
+            # 📊 Results
+            # ======================
             st.markdown("## 📊 Results")
 
-            # 📊 XGBoost
             direction = "📈 UP" if data["xgboost_prediction"] == 1 else "📉 DOWN"
             st.metric("📊 XGBoost Trend", direction)
 
-            # 💬 Sentiment
             st.write("💬 Sentiment Score:", data["sentiment_score"])
-
-            # 📈 GP
-            st.write("📈 GP Prediction:", data["gp_prediction"])
-            st.write("⚠️ Uncertainty:", data["gp_uncertainty"])
-
-            # 🔥 Sentiment Interpretation
-            if data["sentiment_score"] > 0.7:
-                st.success("📈 Positive market sentiment")
-            elif data["sentiment_score"] < 0.3:
-                st.error("📉 Negative market sentiment")
-            else:
-                st.info("⚖️ Neutral sentiment")
-
-            # 🚀 Final Prediction
             st.write("🚀 Final Prediction:", data["final_prediction"])
 
+            # ======================
+            # 🧠 AI Signal
+            # ======================
+            st.markdown("## 🧠 AI Signal")
+
             if data["final_prediction"] > 0.6:
-                st.success("📈 Strong Buy Signal")
+                st.success("🟢 STRONG BUY")
             elif data["final_prediction"] > 0.4:
-                st.info("⚖️ Neutral Trend")
+                st.info("🟡 HOLD")
             else:
-                st.error("📉 Bearish Trend")
+                st.error("🔴 SELL")
+
+            # ======================
+            # 🎯 Confidence
+            # ======================
+            st.markdown("## 🎯 AI Confidence")
+
+            confidence = 1 - np.std(data["future_prices"]) / 100
+            confidence = max(0, min(1, confidence))
+
+            st.progress(confidence)
+            st.write(f"Confidence Score: {round(confidence, 2)}")
 
             # ======================
             # 🧾 Cards UI
@@ -110,13 +136,6 @@ if st.button("Predict"):
             st.markdown(f"""
             <div class="card">
             💬 <b>Sentiment Score:</b> {data['sentiment_score']}
-            </div>
-            """, unsafe_allow_html=True)
-
-            st.markdown(f"""
-            <div class="card">
-            📈 <b>GP Prediction:</b> {data['gp_prediction']} <br>
-            ⚠️ <b>Uncertainty:</b> {data['gp_uncertainty']}
             </div>
             """, unsafe_allow_html=True)
 
