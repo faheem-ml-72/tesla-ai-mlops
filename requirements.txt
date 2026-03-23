@@ -5,3 +5,4 @@ numpy
 scikit-learn
 joblib
 tensorflow-cpu==2.15.0
+h5py
