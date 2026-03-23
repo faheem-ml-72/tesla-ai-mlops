@@ -3,6 +3,7 @@ import requests
 import yfinance as yf
 import pandas as pd
 import numpy as np
+import plotly.graph_objects as go  # ✅ FIXED
 
 # ======================
 # 🎨 Styling
@@ -39,15 +40,18 @@ st.markdown('<div class="title">🚀 Tesla Stock AI Dashboard</div>', unsafe_all
 st.write("")
 
 # ======================
-# 📈 Live Stock Chart
+# 📈 Stock Chart
 # ======================
 data_chart = yf.download("TSLA", period="1mo")
 
 st.markdown("## 📈 Tesla Stock Price")
 st.line_chart(data_chart["Close"])
 
-# KPI
+# ======================
+# 📊 KPIs
+# ======================
 col1, col2, col3 = st.columns(3)
+
 col1.metric("💰 Price", round(data_chart["Close"].iloc[-1], 2))
 col2.metric("📈 Daily Change %", round(data_chart["Close"].pct_change().iloc[-1]*100, 2))
 col3.metric("📊 Volume", int(data_chart["Volume"].iloc[-1]))
@@ -66,24 +70,80 @@ if st.button("Predict"):
     if news:
         try:
             url = "https://tesla-ai-mlops.onrender.com/predict"
-
             response = requests.post(url, params={"news": news})
+
+            if response.status_code != 200:
+                st.error("❌ API failed")
+                st.stop()
+
             data = response.json()
 
             # ======================
-            # 📈 Combined Forecast Graph
+            # 📈 PRO GRAPH
             # ======================
-            past_df = data_chart["Close"].tail(30)
+            if "future_prices" in data:
 
-            future_prices = data["future_prices"]
-            future_dates = pd.date_range(start=data_chart.index[-1], periods=8)[1:]
+                past_df = data_chart["Close"].tail(30)
 
-            future_df = pd.Series(future_prices, index=future_dates)
+                future_prices = data["future_prices"]
+                future_dates = pd.date_range(
+                    start=data_chart.index[-1],
+                    periods=len(future_prices)+1
+                )[1:]
 
-            combined = pd.concat([past_df, future_df])
+                future_df = pd.Series(future_prices, index=future_dates)
 
-            st.markdown("## 📈 Price Forecast (Past + Future)")
-            st.line_chart(combined)
+                upper = future_df + np.std(future_prices)
+                lower = future_df - np.std(future_prices)
+
+                fig = go.Figure()
+
+                # Past
+                fig.add_trace(go.Scatter(
+                    x=past_df.index,
+                    y=past_df,
+                    mode='lines',
+                    name='Past Price',
+                    line=dict(color='cyan', width=3)
+                ))
+
+                # Future
+                fig.add_trace(go.Scatter(
+                    x=future_df.index,
+                    y=future_df,
+                    mode='lines',
+                    name='Predicted',
+                    line=dict(color='orange', width=3, dash='dash')
+                ))
+
+                # Upper band
+                fig.add_trace(go.Scatter(
+                    x=future_df.index,
+                    y=upper,
+                    line=dict(width=0),
+                    showlegend=False
+                ))
+
+                # Lower band + fill
+                fig.add_trace(go.Scatter(
+                    x=future_df.index,
+                    y=lower,
+                    fill='tonexty',
+                    line=dict(width=0),
+                    name='Uncertainty',
+                    fillcolor='rgba(255,165,0,0.2)'
+                ))
+
+                fig.update_layout(
+                    template="plotly_dark",
+                    height=500,
+                    title="📈 Tesla Forecast"
+                )
+
+                st.plotly_chart(fig, use_container_width=True)
+
+            else:
+                st.warning("⚠️ No future prediction")
 
             # ======================
             # 📊 Results
@@ -93,16 +153,14 @@ if st.button("Predict"):
             direction = "📈 UP" if data["xgboost_prediction"] == 1 else "📉 DOWN"
             st.metric("📊 XGBoost Trend", direction)
 
-            st.write("💬 Sentiment Score:", data["sentiment_score"])
-            st.write("🚀 Final Prediction:", data["final_prediction"])
+            st.write("💬 Sentiment:", round(data["sentiment_score"], 3))
+            st.write("🚀 Final Prediction:", round(data["final_prediction"], 3))
 
             # ======================
-            # 🧠 AI Signal
+            # 🧠 Signal
             # ======================
-            st.markdown("## 🧠 AI Signal")
-
             if data["final_prediction"] > 0.6:
-                st.success("🟢 STRONG BUY")
+                st.success("🟢 BUY")
             elif data["final_prediction"] > 0.4:
                 st.info("🟡 HOLD")
             else:
@@ -111,42 +169,17 @@ if st.button("Predict"):
             # ======================
             # 🎯 Confidence
             # ======================
-            st.markdown("## 🎯 AI Confidence")
-
-            confidence = 1 - np.std(data["future_prices"]) / 100
-            confidence = max(0, min(1, confidence))
+            if "future_prices" in data:
+                confidence = 1 - np.std(data["future_prices"]) / np.mean(data["future_prices"])
+                confidence = max(0, min(1, confidence))
+            else:
+                confidence = 0.5
 
             st.progress(confidence)
-            st.write(f"Confidence Score: {round(confidence, 2)}")
-
-            # ======================
-            # 🧾 Cards UI
-            # ======================
-            st.markdown("## 📊 Analysis Cards")
-
-            st.markdown(f"""
-            <div class="card">
-            📊 <b>XGBoost Trend:</b> 
-            <span class="{ 'green' if data['xgboost_prediction']==1 else 'red' }">
-            { 'UP 📈' if data['xgboost_prediction']==1 else 'DOWN 📉' }
-            </span>
-            </div>
-            """, unsafe_allow_html=True)
-
-            st.markdown(f"""
-            <div class="card">
-            💬 <b>Sentiment Score:</b> {data['sentiment_score']}
-            </div>
-            """, unsafe_allow_html=True)
-
-            st.markdown(f"""
-            <div class="card">
-            🚀 <b>Final Prediction:</b> {data['final_prediction']}
-            </div>
-            """, unsafe_allow_html=True)
+            st.write(f"Confidence: {round(confidence, 2)}")
 
         except Exception as e:
-            st.error(f"API Error: {e}")
+            st.error(f"🚨 {e}")
 
     else:
-        st.warning("Please enter news text")
+        st.warning("⚠️ Enter news text")
