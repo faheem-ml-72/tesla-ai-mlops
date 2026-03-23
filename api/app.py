@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 import pandas as pd
 import numpy as np
+from sklearn.gaussian_process import GaussianProcessRegressor
 import joblib
 import sys
 import os
@@ -57,6 +58,28 @@ def predict(news: str):
     xgb_pred = model.predict(x_input)[0]
 
     # ======================
+    # Gaussian Process
+    # ======================
+    close_prices = df['Close'].values[-100:]
+
+    X = np.arange(len(close_prices)).reshape(-1, 1)
+    y = close_prices
+
+    gp = GaussianProcessRegressor()
+    gp.fit(X, y)
+
+    future_x = np.array([[len(close_prices)]])
+    gp_pred, gp_std = gp.predict(future_x, return_std=True)
+
+    gp_pred = gp_pred[0]
+    gp_uncertainty = gp_std[0]
+
+    # ======================
+    # LSTM (temporary placeholder)
+    # ======================
+    lstm_pred = 0.0
+
+    # ======================
     # Sentiment
     # ======================
     sentiment_score = get_sentiment_score(news)
@@ -65,13 +88,16 @@ def predict(news: str):
     # Ensemble
     # ======================
     final_prediction = (
-        0.7 * xgb_pred +
-        0.3 * sentiment_score
+        0.5 * xgb_pred +
+        0.3 * sentiment_score +
+        0.2 * gp_pred
     )
 
     return {
         "xgboost_prediction": float(xgb_pred),
-        "lstm_prediction": 0.0,  # placeholder
+        "lstm_prediction": float(lstm_pred),
         "sentiment_score": float(sentiment_score),
+        "gp_prediction": float(gp_pred),
+        "gp_uncertainty": float(gp_uncertainty),
         "final_prediction": float(final_prediction)
     }
