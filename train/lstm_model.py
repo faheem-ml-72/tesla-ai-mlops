@@ -5,47 +5,79 @@ from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import LSTM, Dense
 import joblib
 
-# Load data
-df = pd.read_csv("data/tesla_features.csv", index_col=0)
+# ======================
+# 🔹 TRAIN FUNCTION
+# ======================
+def train_lstm():
 
-# Use only Close price
-data = df[['Close']].values
+    print("🚀 Training LSTM Model...")
 
-# Scale data
-scaler = MinMaxScaler()
-data_scaled = scaler.fit_transform(data)
+    # Load data
+    df = pd.read_csv("data/tesla_features.csv", index_col=0)
 
-# Create sequences
-X = []
-y = []
+    # Use Close price
+    data = df[['Close']].values
 
-window_size = 60
+    # Scale data
+    scaler = MinMaxScaler()
+    data_scaled = scaler.fit_transform(data)
 
-for i in range(window_size, len(data_scaled)):
-    X.append(data_scaled[i-window_size:i])
-    y.append(data_scaled[i])
+    # Save scaler
+    joblib.dump(scaler, "models/lstm_scaler.pkl")
 
-X, y = np.array(X), np.array(y)
+    # ======================
+    # Create sequences
+    # ======================
+    X, y = [], []
+    window_size = 60
 
-# Split data
-split = int(0.8 * len(X))
-X_train, X_test = X[:split], X[split:]
-y_train, y_test = y[:split], y[split:]
+    for i in range(window_size, len(data_scaled)):
+        X.append(data_scaled[i-window_size:i])
+        y.append(data_scaled[i])
 
-# Build model
-model = Sequential([
-    LSTM(50, return_sequences=True, input_shape=(X.shape[1], 1)),
-    LSTM(50),
-    Dense(1)
-])
+    X, y = np.array(X), np.array(y)
 
-model.compile(optimizer='adam', loss='mse')
+    # Reshape (VERY IMPORTANT)
+    X = np.reshape(X, (X.shape[0], X.shape[1], 1))
 
-# Train model
-model.fit(X_train, y_train, epochs=5, batch_size=32)
+    # ======================
+    # Train/Test Split
+    # ======================
+    split = int(0.8 * len(X))
+    X_train, X_test = X[:split], X[split:]
+    y_train, y_test = y[:split], y[split:]
 
-# Save model
-model.save("models/lstm_model.h5")
-joblib.dump(scaler, "models/lstm_scaler.pkl")
+    # ======================
+    # Build Model
+    # ======================
+    model = Sequential([
+        LSTM(50, return_sequences=True, input_shape=(X.shape[1], 1)),
+        LSTM(50),
+        Dense(1)
+    ])
 
-print("LSTM model saved ✅")
+    model.compile(optimizer='adam', loss='mse')
+
+    # ======================
+    # Train
+    # ======================
+    model.fit(X_train, y_train, epochs=10, batch_size=32)
+
+    # ======================
+    # Evaluate
+    # ======================
+    loss = model.evaluate(X_test, y_test)
+    print(f"📊 Test Loss: {loss}")
+
+    # ======================
+    # Save Model
+    # ======================
+    model.save("models/lstm_model.h5")
+
+    print("✅ LSTM model saved successfully!")
+
+# ======================
+# 🔹 RUN
+# ======================
+if __name__ == "__main__":
+    train_lstm()
