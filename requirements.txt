@@ -1,7 +1,7 @@
-streamlit
+fastapi
+uvicorn
 pandas
 numpy
-requests
-yfinance
-plotly
-tensorflow
+scikit-learn
+joblib
+tensorflow-cpu==2.15.0
