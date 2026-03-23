@@ -13,3 +13,4 @@ gunicorn==21.2.0
 plotly
 streamlit
 yfinance
+altair
