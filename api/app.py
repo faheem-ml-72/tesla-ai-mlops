@@ -21,7 +21,7 @@ model = None
 def get_model():
     global model
     if model is None:
-        model = joblib.load("models/xgboost_model.pkl")
+        model = joblib.load("models/latest_model.pkl")
     return model
 
 
