@@ -1,5 +1,4 @@
-from fastapi import FastAPI
-from pydantic import BaseModel
+from fastapi import FastAPI, HTTPException
 import pandas as pd
 import numpy as np
 from sklearn.gaussian_process import GaussianProcessRegressor
@@ -15,13 +14,6 @@ from utils.sentiment import get_sentiment_score
 app = FastAPI()
 
 # ======================
-# 🔹 Request Schema (IMPORTANT FIX)
-# ======================
-class PredictRequest(BaseModel):
-    news: str
-    days: int
-
-# ======================
 # 🔹 Lazy Load Model
 # ======================
 model = None
@@ -32,6 +24,7 @@ def get_model():
         model = joblib.load("models/xgboost_model.pkl")
     return model
 
+
 # ======================
 # 🔹 Features
 # ======================
@@ -40,6 +33,7 @@ FEATURES = [
     'EMA_10', 'EMA_50', 'RSI', 'MACD', 'Signal_Line'
 ]
 
+
 # ======================
 # 🔹 Home Endpoint
 # ======================
@@ -47,16 +41,13 @@ FEATURES = [
 def home():
     return {"message": "Tesla AI MLOps API is running 🚀"}
 
-# ======================
-# 🔹 Prediction Endpoint (FIXED)
-# ======================
-class PredictRequest(BaseModel):
-    news: str
-    days: int
 
+# ======================
+# 🔹 Prediction Endpoint
+# ======================
 @app.post("/predict")
-def predict(data: PredictRequest):
-
+def predict(news: str):
+    try:
         # Load model
         model = get_model()
 
@@ -64,7 +55,7 @@ def predict(data: PredictRequest):
         df = pd.read_csv("data/tesla_features.csv", index_col=0)
 
         if df.empty:
-            return {"error": "Data not available"}
+            raise HTTPException(status_code=400, detail="Data file is empty")
 
         # ======================
         # 📊 XGBoost Prediction
@@ -75,10 +66,7 @@ def predict(data: PredictRequest):
         # ======================
         # 📈 Gaussian Process
         # ======================
-        close_prices = df['Close'].dropna().values[-100:]
-
-        if len(close_prices) < 10:
-            return {"error": "Not enough data for prediction"}
+        close_prices = df['Close'].values[-100:]
 
         X = np.arange(len(close_prices)).reshape(-1, 1)
         y = close_prices
@@ -86,13 +74,10 @@ def predict(data: PredictRequest):
         gp = GaussianProcessRegressor()
         gp.fit(X, y)
 
-        future_steps = days  # ✅ dynamic from frontend
+        future_steps = 7
         future_x = np.arange(len(close_prices), len(close_prices) + future_steps).reshape(-1, 1)
 
         gp_preds, gp_std = gp.predict(future_x, return_std=True)
-
-        future_prices = gp_preds.tolist()
-        uncertainty = gp_std.tolist()
 
         # ======================
         # 🧠 Sentiment
@@ -100,7 +85,7 @@ def predict(data: PredictRequest):
         sentiment_score = get_sentiment_score(news)
 
         # ======================
-        # 🚀 Final Prediction
+        # 🚀 Final Ensemble
         # ======================
         final_prediction = (
             0.6 * xgb_pred +
@@ -114,10 +99,10 @@ def predict(data: PredictRequest):
         return {
             "xgboost_prediction": float(xgb_pred),
             "sentiment_score": float(sentiment_score),
-            "future_prices": future_prices,
-            "uncertainty": uncertainty,
+            "future_prices": gp_preds.tolist(),
+            "uncertainty": gp_std.tolist(),
             "final_prediction": float(final_prediction)
         }
 
     except Exception as e:
-        return {"error": str(e)}
+        raise HTTPException(status_code=500, detail=str(e))
