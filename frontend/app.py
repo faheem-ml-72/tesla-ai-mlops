@@ -12,7 +12,6 @@ st.markdown("""
 <style>
 body { background-color: #0e1117; }
 .main { background-color: #0e1117; }
-
 .title {
     font-size: 40px;
     font-weight: bold;
@@ -29,13 +28,13 @@ st.markdown('<div class="title">🚀 Tesla Stock AI Dashboard</div>', unsafe_all
 st.write("")
 
 # ======================
-# 📈 Stock Data (FULL SAFE VERSION)
+# 📈 Stock Data
 # ======================
 try:
     data_chart = yf.download("TSLA", period="1mo")
 
     if data_chart is None or data_chart.empty or "Close" not in data_chart.columns:
-        st.error("❌ Failed to load Tesla stock data. Try refreshing.")
+        st.error("❌ Failed to load Tesla stock data.")
         st.stop()
 
 except Exception as e:
@@ -46,7 +45,7 @@ st.markdown("## 📈 Tesla Stock Price")
 st.line_chart(data_chart["Close"])
 
 # ======================
-# 📊 KPIs (NO CRASH VERSION)
+# 📊 KPIs
 # ======================
 col1, col2, col3 = st.columns(3)
 
@@ -62,7 +61,7 @@ try:
     col2.metric("📈 Daily Change %", round(latest_change, 2))
     col3.metric("📊 Volume", latest_volume)
 
-except Exception:
+except:
     st.warning("⚠️ Unable to calculate metrics")
 
 # ======================
@@ -91,14 +90,14 @@ if st.button("Predict"):
 
     if not news:
         st.warning("⚠️ Enter news text")
+
     else:
         try:
-            url = "https://tesla-ai-mlops.onrender.com/predict"
+            API_URL = "https://tesla-ai-mlops.onrender.com/predict"
 
             response = requests.post(
-                url,
-                json={"news": news, "days": days},
-                timeout=30
+                API_URL,
+                params={"news": news}
             )
 
             if response.status_code != 200:
@@ -113,7 +112,6 @@ if st.button("Predict"):
             if "future_prices" in data and len(data["future_prices"]) > 0:
 
                 past_df = data_chart["Close"].tail(30)
-
                 future_prices = data["future_prices"]
 
                 future_dates = pd.date_range(
