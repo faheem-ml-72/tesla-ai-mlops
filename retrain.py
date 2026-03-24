@@ -1,6 +1,12 @@
-from train.lstm_model import train_lstm
+import os
+import datetime
+import subprocess
 
-# Just call without arguments
-train_lstm()
+print("🚀 Starting retraining...")
 
-print("Model retrained successfully ✅")
+# Run training script
+subprocess.run(["python", "train/xgboost_model.py"], check=True)
+
+print("✅ Retraining complete!")
+
+# Optional: You can add Git commit logic here later
