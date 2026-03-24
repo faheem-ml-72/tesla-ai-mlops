@@ -25,7 +25,6 @@ body { background-color: #0e1117; }
     padding: 20px;
     border-radius: 15px;
     margin: 10px 0;
-    box-shadow: 0px 4px 10px rgba(0,0,0,0.3);
 }
 
 .green { color: #00ff88; font-weight: bold; }
@@ -40,21 +39,28 @@ st.markdown('<div class="title">🚀 Tesla Stock AI Dashboard</div>', unsafe_all
 st.write("")
 
 # ======================
-# 📈 Stock Chart
+# 📈 Stock Chart (SAFE)
 # ======================
 data_chart = yf.download("TSLA", period="1mo")
+
+if data_chart.empty:
+    st.error("❌ Failed to load Tesla stock data. Try refreshing.")
+    st.stop()
 
 st.markdown("## 📈 Tesla Stock Price")
 st.line_chart(data_chart["Close"])
 
 # ======================
-# 📊 KPIs
+# 📊 KPIs (SAFE)
 # ======================
 col1, col2, col3 = st.columns(3)
 
-col1.metric("💰 Price", round(data_chart["Close"].iloc[-1], 2))
-col2.metric("📈 Daily Change %", round(data_chart["Close"].pct_change().iloc[-1]*100, 2))
-col3.metric("📊 Volume", int(data_chart["Volume"].iloc[-1]))
+try:
+    col1.metric("💰 Price", round(data_chart["Close"].iloc[-1], 2))
+    col2.metric("📈 Daily Change %", round(data_chart["Close"].pct_change().iloc[-1]*100, 2))
+    col3.metric("📊 Volume", int(data_chart["Volume"].iloc[-1]))
+except:
+    st.warning("⚠️ Unable to calculate metrics")
 
 # ======================
 # 🔍 Input
@@ -84,19 +90,17 @@ if st.button("Predict"):
         st.warning("⚠️ Enter news text")
     else:
         try:
-            # ✅ FIXED API URL
             url = "https://tesla-ai-mlops.onrender.com/predict"
 
-            # ✅ FIXED REQUEST FORMAT
             response = requests.post(
                 url,
                 json={
                     "news": news,
                     "days": days
-                }
+                },
+                timeout=30
             )
 
-            # ✅ Better error handling
             if response.status_code != 200:
                 st.error(f"❌ API failed: {response.text}")
                 st.stop()
@@ -111,6 +115,7 @@ if st.button("Predict"):
                 past_df = data_chart["Close"].tail(30)
 
                 future_prices = data["future_prices"]
+
                 future_dates = pd.date_range(
                     start=data_chart.index[-1],
                     periods=len(future_prices)+1
@@ -123,7 +128,6 @@ if st.button("Predict"):
 
                 fig = go.Figure()
 
-                # Past
                 fig.add_trace(go.Scatter(
                     x=past_df.index,
                     y=past_df,
@@ -132,7 +136,6 @@ if st.button("Predict"):
                     line=dict(color='cyan', width=3)
                 ))
 
-                # Predicted
                 fig.add_trace(go.Scatter(
                     x=future_df.index,
                     y=future_df,
@@ -141,7 +144,6 @@ if st.button("Predict"):
                     line=dict(color='orange', width=3, dash='dash')
                 ))
 
-                # Upper band
                 fig.add_trace(go.Scatter(
                     x=future_df.index,
                     y=upper,
@@ -149,7 +151,6 @@ if st.button("Predict"):
                     showlegend=False
                 ))
 
-                # Lower band
                 fig.add_trace(go.Scatter(
                     x=future_df.index,
                     y=lower,
@@ -194,7 +195,7 @@ if st.button("Predict"):
             # ======================
             # 📊 Confidence
             # ======================
-            if "future_prices" in data:
+            if "future_prices" in data and len(data["future_prices"]) > 0:
                 confidence = 1 - np.std(data["future_prices"]) / np.mean(data["future_prices"])
                 confidence = max(0, min(1, confidence))
             else:
