@@ -1,9 +1,10 @@
-streamlit
-requests
-yfinance
+fastapi
+uvicorn
+gunicorn
 pandas
 numpy
-plotly
 scikit-learn
 joblib
+tensorflow==2.15.0
+h5py
 textblob
