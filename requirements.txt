@@ -1,11 +1,5 @@
-fastapi
-uvicorn
-gunicorn
+streamlit
+requests
 pandas
 numpy
-scikit-learn
-joblib
-tensorflow==2.15.0
-h5py
-textblob
-xgboost
+plotly
