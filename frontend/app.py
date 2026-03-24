@@ -3,7 +3,7 @@ import requests
 import yfinance as yf
 import pandas as pd
 import numpy as np
-import plotly.graph_objects as go  # ✅ FIXED
+import plotly.graph_objects as go
 
 # ======================
 # 🎨 Styling
@@ -63,7 +63,7 @@ st.markdown("## 🧠 AI Prediction")
 news = st.text_input("Enter Tesla news:")
 
 # ======================
-# 🎛️ User Controls
+# 🎛️ Controls
 # ======================
 st.markdown("### ⚙️ Prediction Controls")
 
@@ -74,25 +74,37 @@ with col1:
 
 with col2:
     selected_date = st.date_input("📆 Select Start Date")
-    
+
 # ======================
 # 🔮 Prediction
 # ======================
 if st.button("Predict"):
 
-    if news:
+    if not news:
+        st.warning("⚠️ Enter news text")
+    else:
         try:
+            # ✅ FIXED API URL
             url = "https://tesla-ai-mlops.onrender.com/predict"
-            response = requests.post(url, params={"news": news})
 
+            # ✅ FIXED REQUEST FORMAT
+            response = requests.post(
+                url,
+                json={
+                    "news": news,
+                    "days": days
+                }
+            )
+
+            # ✅ Better error handling
             if response.status_code != 200:
-                st.error("❌ API failed")
+                st.error(f"❌ API failed: {response.text}")
                 st.stop()
 
             data = response.json()
 
             # ======================
-            # 📈 PRO GRAPH
+            # 📈 Graph
             # ======================
             if "future_prices" in data:
 
@@ -120,7 +132,7 @@ if st.button("Predict"):
                     line=dict(color='cyan', width=3)
                 ))
 
-                # Future
+                # Predicted
                 fig.add_trace(go.Scatter(
                     x=future_df.index,
                     y=future_df,
@@ -137,7 +149,7 @@ if st.button("Predict"):
                     showlegend=False
                 ))
 
-                # Lower band + fill
+                # Lower band
                 fig.add_trace(go.Scatter(
                     x=future_df.index,
                     y=lower,
@@ -156,31 +168,31 @@ if st.button("Predict"):
                 st.plotly_chart(fig, use_container_width=True)
 
             else:
-                st.warning("⚠️ No future prediction")
+                st.warning("⚠️ No future prediction returned")
 
             # ======================
             # 📊 Results
             # ======================
             st.markdown("## 📊 Results")
 
-            direction = "📈 UP" if data["xgboost_prediction"] == 1 else "📉 DOWN"
+            direction = "📈 UP" if data.get("xgboost_prediction", 0) == 1 else "📉 DOWN"
             st.metric("📊 XGBoost Trend", direction)
 
-            st.write("💬 Sentiment:", round(data["sentiment_score"], 3))
-            st.write("🚀 Final Prediction:", round(data["final_prediction"], 3))
+            st.write("💬 Sentiment:", round(data.get("sentiment_score", 0), 3))
+            st.write("🚀 Final Prediction:", round(data.get("final_prediction", 0), 3))
 
             # ======================
-            # 🧠 Signal
+            # 🎯 Signal
             # ======================
-            if data["final_prediction"] > 0.6:
+            if data.get("final_prediction", 0) > 0.6:
                 st.success("🟢 BUY")
-            elif data["final_prediction"] > 0.4:
+            elif data.get("final_prediction", 0) > 0.4:
                 st.info("🟡 HOLD")
             else:
                 st.error("🔴 SELL")
 
             # ======================
-            # 🎯 Confidence
+            # 📊 Confidence
             # ======================
             if "future_prices" in data:
                 confidence = 1 - np.std(data["future_prices"]) / np.mean(data["future_prices"])
@@ -193,6 +205,3 @@ if st.button("Predict"):
 
         except Exception as e:
             st.error(f"🚨 {e}")
-
-    else:
-        st.warning("⚠️ Enter news text")
