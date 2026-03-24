@@ -12,10 +12,27 @@ st.set_page_config(page_title="Tesla AI Predictor", layout="wide")
 
 st.markdown("""
 <style>
+
 /* Background */
 .stApp {
     background: linear-gradient(135deg, #0f2027, #203a43, #2c5364);
-    color: white;
+}
+
+/* 🔥 FIX TEXT VISIBILITY */
+body, .stMarkdown, .stText, .stMetric {
+    color: #ffffff !important;
+}
+
+/* Metric values */
+[data-testid="stMetricValue"] {
+    color: #ffffff !important;
+    font-size: 28px;
+    font-weight: bold;
+}
+
+/* Metric labels */
+[data-testid="stMetricLabel"] {
+    color: #cfd8dc !important;
 }
 
 /* Title */
@@ -24,20 +41,19 @@ st.markdown("""
     font-weight: bold;
     text-align: center;
     margin-bottom: 10px;
+    color: white;
 }
 
-/* Card */
-.card {
-    background-color: rgba(255,255,255,0.05);
-    padding: 20px;
-    border-radius: 15px;
-    box-shadow: 0px 4px 15px rgba(0,0,0,0.3);
+/* Headers */
+h1, h2, h3 {
+    color: white !important;
 }
 
-/* Section spacing */
-.section {
-    margin-top: 30px;
+/* Input box */
+input {
+    color: black !important;
 }
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -107,75 +123,36 @@ if st.button("Predict 🚀"):
     data = response.json()
 
     # ======================
-    # 📈 CLEAN FORECAST GRAPH
+    # 📊 TESLA FORECAST TABLE (NEW)
     # ======================
-    st.markdown("## 📊 Tesla Forecast")
+    st.markdown("## 📊 Tesla Forecast Table")
 
-    past = data_chart["Close"].tail(30)
     future = data["future_prices"]
+    uncertainty = data["uncertainty"]
 
     future_dates = pd.date_range(
-        start=past.index[-1],
-        periods=len(future)+1
-    )[1:]
-
-    future_series = pd.Series(future, index=future_dates)
-
-    uncertainty = np.std(future)
-
-    fig = go.Figure()
-
-    # Past
-    fig.add_trace(go.Scatter(
-        x=past.index,
-        y=past,
-        name="Past Price",
-        line=dict(color="#00d4ff", width=3)
-    ))
-
-    # Future
-    fig.add_trace(go.Scatter(
-        x=future_series.index,
-        y=future_series,
-        name="Prediction",
-        line=dict(color="#ff9800", width=3, dash="dash")
-    ))
-
-    # Uncertainty band
-    fig.add_trace(go.Scatter(
-        x=future_series.index,
-        y=future_series + uncertainty,
-        line=dict(width=0),
-        showlegend=False
-    ))
-
-    fig.add_trace(go.Scatter(
-        x=future_series.index,
-        y=future_series - uncertainty,
-        fill='tonexty',
-        name="Uncertainty",
-        fillcolor='rgba(255,165,0,0.2)',
-        line=dict(width=0)
-    ))
-
-    fig.update_layout(
-        template="plotly_dark",
-        height=450,
-        margin=dict(l=10, r=10, t=40, b=10)
+        start=pd.Timestamp.today(),
+        periods=len(future)
     )
 
-    st.plotly_chart(fig, use_container_width=True)
+    forecast_df = pd.DataFrame({
+        "Date": future_dates,
+        "Predicted Price": np.round(future, 2),
+        "Uncertainty": np.round(uncertainty, 4)
+    })
+
+    st.dataframe(forecast_df, use_container_width=True)
 
     # ======================
-    # 📊 RESULTS (CLEAN)
+    # 📊 RESULTS
     # ======================
     st.markdown("## 📊 Results")
 
     col1, col2, col3 = st.columns(3)
 
-    trend = "UP 📈" if data["xgboost_prediction"] == 1 else "DOWN 📉"
-    col1.metric("Trend", trend)
+    trend = "📉 DOWN" if data["xgboost_prediction"] == 0 else "📈 UP"
 
+    col1.metric("Trend", trend)
     col2.metric("Sentiment", round(data["sentiment_score"], 3))
     col3.metric("Prediction", round(data["final_prediction"], 3))
 
@@ -185,14 +162,14 @@ if st.button("Predict 🚀"):
     pred = data["final_prediction"]
 
     if pred > 0.6:
-        st.success("🟢 STRONG BUY")
+        st.markdown("### 🟢 STRONG BUY")
     elif pred > 0.4:
-        st.warning("🟡 HOLD")
+        st.markdown("### 🟡 HOLD")
     else:
-        st.error("🔴 SELL")
+        st.markdown("### 🔴 SELL")
 
     # ======================
-    # 📊 CONFIDENCE (FIXED)
+    # 📊 CONFIDENCE
     # ======================
     confidence = abs(pred) / 10
     confidence = min(confidence, 1.0)
