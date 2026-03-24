@@ -114,3 +114,6 @@ def predict(news: str):
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+    
+    # add this in api/app.py
+print("Redeploy triggered")
