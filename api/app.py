@@ -61,8 +61,16 @@ def predict(news: str):
         # 📊 XGBoost Prediction
         # ======================
         x_input = df[FEATURES].iloc[-1:].values
+        # 🔍 DEBUG START
+        print("Input shape:", x_input.shape)
+        print("Input values:", x_input)
+        # 🔍 DEBUG END
+
         xgb_pred = model.predict(x_input)[0]
 
+        # 🔍 DEBUG START
+        print("Prediction:", xgb_pred)
+        # 🔍 DEBUG END
         # ======================
         # 📈 Gaussian Process
         # ======================
