@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from pydantic import BaseModel
 import pandas as pd
 import numpy as np
 from sklearn.gaussian_process import GaussianProcessRegressor
@@ -12,6 +13,13 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from utils.sentiment import get_sentiment_score
 
 app = FastAPI()
+
+# ======================
+# 🔹 Request Schema (IMPORTANT FIX)
+# ======================
+class PredictRequest(BaseModel):
+    news: str
+    days: int
 
 # ======================
 # 🔹 Lazy Load Model
@@ -40,63 +48,76 @@ def home():
     return {"message": "Tesla AI MLOps API is running 🚀"}
 
 # ======================
-# 🔹 Prediction Endpoint
+# 🔹 Prediction Endpoint (FIXED)
 # ======================
+class PredictRequest(BaseModel):
+    news: str
+    days: int
+
 @app.post("/predict")
-def predict(news: str):
+def predict(data: PredictRequest):
 
-    # Load model
-    model = get_model()
+        # Load model
+        model = get_model()
 
-    # Load latest data
-    df = pd.read_csv("data/tesla_features.csv", index_col=0)
+        # Load data
+        df = pd.read_csv("data/tesla_features.csv", index_col=0)
 
-    # ======================
-    # 📊 XGBoost Prediction
-    # ======================
-    x_input = df[FEATURES].iloc[-1:].values
-    xgb_pred = model.predict(x_input)[0]
+        if df.empty:
+            return {"error": "Data not available"}
 
-    # ======================
-    # 📈 Gaussian Process (Future 7 Days)
-    # ======================
-    close_prices = df['Close'].values[-100:]
+        # ======================
+        # 📊 XGBoost Prediction
+        # ======================
+        x_input = df[FEATURES].iloc[-1:].values
+        xgb_pred = model.predict(x_input)[0]
 
-    X = np.arange(len(close_prices)).reshape(-1, 1)
-    y = close_prices
+        # ======================
+        # 📈 Gaussian Process
+        # ======================
+        close_prices = df['Close'].dropna().values[-100:]
 
-    gp = GaussianProcessRegressor()
-    gp.fit(X, y)
+        if len(close_prices) < 10:
+            return {"error": "Not enough data for prediction"}
 
-    future_steps = 7
-    future_x = np.arange(len(close_prices), len(close_prices) + future_steps).reshape(-1, 1)
+        X = np.arange(len(close_prices)).reshape(-1, 1)
+        y = close_prices
 
-    gp_preds, gp_std = gp.predict(future_x, return_std=True)
+        gp = GaussianProcessRegressor()
+        gp.fit(X, y)
 
-    future_prices = gp_preds.tolist()       # ✅ REAL values (no scaling)
-    uncertainty = gp_std.tolist()
+        future_steps = days  # ✅ dynamic from frontend
+        future_x = np.arange(len(close_prices), len(close_prices) + future_steps).reshape(-1, 1)
 
-    # ======================
-    # 🧠 Sentiment
-    # ======================
-    sentiment_score = get_sentiment_score(news)
+        gp_preds, gp_std = gp.predict(future_x, return_std=True)
 
-    # ======================
-    # 🚀 Final Ensemble
-    # ======================
-    final_prediction = (
-        0.6 * xgb_pred +
-        0.2 * sentiment_score +
-        0.2 * np.mean(gp_preds)   # use average future trend
-    )
+        future_prices = gp_preds.tolist()
+        uncertainty = gp_std.tolist()
 
-    # ======================
-    # 📤 Response
-    # ======================
-    return {
-        "xgboost_prediction": float(xgb_pred),
-        "sentiment_score": float(sentiment_score),
-        "future_prices": future_prices,
-        "uncertainty": uncertainty,
-        "final_prediction": float(final_prediction)
-    }
+        # ======================
+        # 🧠 Sentiment
+        # ======================
+        sentiment_score = get_sentiment_score(news)
+
+        # ======================
+        # 🚀 Final Prediction
+        # ======================
+        final_prediction = (
+            0.6 * xgb_pred +
+            0.2 * sentiment_score +
+            0.2 * np.mean(gp_preds)
+        )
+
+        # ======================
+        # 📤 Response
+        # ======================
+        return {
+            "xgboost_prediction": float(xgb_pred),
+            "sentiment_score": float(sentiment_score),
+            "future_prices": future_prices,
+            "uncertainty": uncertainty,
+            "final_prediction": float(final_prediction)
+        }
+
+    except Exception as e:
+        return {"error": str(e)}
