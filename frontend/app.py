@@ -19,16 +19,6 @@ body { background-color: #0e1117; }
     color: white;
     text-align: center;
 }
-
-.card {
-    background-color: #1c1f26;
-    padding: 20px;
-    border-radius: 15px;
-    margin: 10px 0;
-}
-
-.green { color: #00ff88; font-weight: bold; }
-.red { color: #ff4b4b; font-weight: bold; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -39,37 +29,50 @@ st.markdown('<div class="title">🚀 Tesla Stock AI Dashboard</div>', unsafe_all
 st.write("")
 
 # ======================
-# 📈 Stock Chart (SAFE)
+# 📈 Stock Data (FULL SAFE VERSION)
 # ======================
-data_chart = yf.download("TSLA", period="1mo")
+try:
+    data_chart = yf.download("TSLA", period="1mo")
 
-if data_chart.empty:
-    st.error("❌ Failed to load Tesla stock data. Try refreshing.")
+    if data_chart is None or data_chart.empty or "Close" not in data_chart.columns:
+        st.error("❌ Failed to load Tesla stock data. Try refreshing.")
+        st.stop()
+
+except Exception as e:
+    st.error(f"❌ Error loading stock data: {e}")
     st.stop()
 
 st.markdown("## 📈 Tesla Stock Price")
 st.line_chart(data_chart["Close"])
 
 # ======================
-# 📊 KPIs (SAFE)
+# 📊 KPIs (NO CRASH VERSION)
 # ======================
 col1, col2, col3 = st.columns(3)
 
 try:
-    col1.metric("💰 Price", round(data_chart["Close"].iloc[-1], 2))
-    col2.metric("📈 Daily Change %", round(data_chart["Close"].pct_change().iloc[-1]*100, 2))
-    col3.metric("📊 Volume", int(data_chart["Volume"].iloc[-1]))
-except:
+    close_series = data_chart["Close"].dropna()
+    volume_series = data_chart["Volume"].dropna()
+
+    latest_price = float(close_series.iloc[-1]) if len(close_series) > 0 else 0
+    latest_change = float(close_series.pct_change().dropna().iloc[-1]) * 100 if len(close_series) > 1 else 0
+    latest_volume = int(volume_series.iloc[-1]) if len(volume_series) > 0 else 0
+
+    col1.metric("💰 Price", round(latest_price, 2))
+    col2.metric("📈 Daily Change %", round(latest_change, 2))
+    col3.metric("📊 Volume", latest_volume)
+
+except Exception:
     st.warning("⚠️ Unable to calculate metrics")
 
 # ======================
-# 🔍 Input
+# 🧠 Input
 # ======================
 st.markdown("## 🧠 AI Prediction")
 news = st.text_input("Enter Tesla news:")
 
 # ======================
-# 🎛️ Controls
+# ⚙️ Controls
 # ======================
 st.markdown("### ⚙️ Prediction Controls")
 
@@ -94,10 +97,7 @@ if st.button("Predict"):
 
             response = requests.post(
                 url,
-                json={
-                    "news": news,
-                    "days": days
-                },
+                json={"news": news, "days": days},
                 timeout=30
             )
 
@@ -110,7 +110,7 @@ if st.button("Predict"):
             # ======================
             # 📈 Graph
             # ======================
-            if "future_prices" in data:
+            if "future_prices" in data and len(data["future_prices"]) > 0:
 
                 past_df = data_chart["Close"].tail(30)
 
@@ -118,7 +118,7 @@ if st.button("Predict"):
 
                 future_dates = pd.date_range(
                     start=data_chart.index[-1],
-                    periods=len(future_prices)+1
+                    periods=len(future_prices) + 1
                 )[1:]
 
                 future_df = pd.Series(future_prices, index=future_dates)
@@ -169,7 +169,7 @@ if st.button("Predict"):
                 st.plotly_chart(fig, use_container_width=True)
 
             else:
-                st.warning("⚠️ No future prediction returned")
+                st.warning("⚠️ No prediction data returned")
 
             # ======================
             # 📊 Results
@@ -185,9 +185,11 @@ if st.button("Predict"):
             # ======================
             # 🎯 Signal
             # ======================
-            if data.get("final_prediction", 0) > 0.6:
+            pred_val = data.get("final_prediction", 0)
+
+            if pred_val > 0.6:
                 st.success("🟢 BUY")
-            elif data.get("final_prediction", 0) > 0.4:
+            elif pred_val > 0.4:
                 st.info("🟡 HOLD")
             else:
                 st.error("🔴 SELL")
