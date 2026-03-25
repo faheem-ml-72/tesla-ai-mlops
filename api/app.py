@@ -134,8 +134,14 @@ def predict(news: str):
         close_prices = df['Close'].values[-100:]
 
         X = np.arange(len(close_prices)).reshape(-1, 1)
-        gp = GaussianProcessRegressor()
-        gp.fit(X, close_prices)
+        # ======================
+# ⚡ Fast Approximation (instead of heavy GP)
+# ======================
+        gp_preds = close_prices[-7:]  # simple fallback
+        gp_std = np.std(close_prices[-30:]) * np.ones(7)
+
+        gp_mean = float(np.mean(gp_preds))
+        gp_uncertainty = float(np.mean(gp_std))
 
         future_x = np.arange(len(close_prices), len(close_prices) + 7).reshape(-1, 1)
         gp_preds, gp_std = gp.predict(future_x, return_std=True)
