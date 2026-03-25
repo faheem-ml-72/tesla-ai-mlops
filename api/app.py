@@ -1,10 +1,10 @@
 from fastapi import FastAPI, HTTPException
 import pandas as pd
 import numpy as np
-from sklearn.gaussian_process import GaussianProcessRegressor
 import joblib
 import sys
 import os
+import subprocess
 from tensorflow.keras.models import load_model
 
 # ======================
@@ -14,7 +14,7 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.abspath(os.path.join(BASE_DIR, "..")))
 
 from utils.sentiment import get_sentiment_score
-from utils.drift import detect_drift   # ✅ NEW
+from utils.drift import detect_drift
 
 app = FastAPI(title="Tesla AI MLOps API 🚀")
 
@@ -104,17 +104,24 @@ def predict(news: str):
             raise HTTPException(status_code=400, detail="Not enough data")
 
         # ======================
-        # 📉 Drift Detection (NEW)
+        # 📉 Drift Detection
         # ======================
         if len(df) < 200:
-            drift_result = {
-                "drift_detected": False,
-                "drift_score": 0.0
-            }
+            drift_result = {"drift_detected": False, "drift_score": 0.0}
         else:
             historical = df['Close'].values[-200:-100]
             recent = df['Close'].values[-100:]
             drift_result = detect_drift(historical, recent)
+
+        # ======================
+        # 🔄 Auto Retrain Trigger
+        # ======================
+        if drift_result["drift_detected"]:
+            print("⚠️ Drift detected! Triggering retraining...")
+            try:
+                subprocess.Popen(["python", "training/retrain.py"])
+            except Exception as e:
+                print("Retraining failed:", str(e))
 
         # ======================
         # 📊 XGBoost
@@ -129,22 +136,12 @@ def predict(news: str):
         lstm_pred = float(lstm.predict(lstm_input, verbose=0)[0][0])
 
         # ======================
-        # 📈 Gaussian Process
+        # ⚡ Fast "GP Approximation"
         # ======================
         close_prices = df['Close'].values[-100:]
 
-        X = np.arange(len(close_prices)).reshape(-1, 1)
-        # ======================
-# ⚡ Fast Approximation (instead of heavy GP)
-# ======================
-        gp_preds = close_prices[-7:]  # simple fallback
+        gp_preds = close_prices[-7:]
         gp_std = np.std(close_prices[-30:]) * np.ones(7)
-
-        gp_mean = float(np.mean(gp_preds))
-        gp_uncertainty = float(np.mean(gp_std))
-
-        future_x = np.arange(len(close_prices), len(close_prices) + 7).reshape(-1, 1)
-        gp_preds, gp_std = gp.predict(future_x, return_std=True)
 
         gp_mean = float(np.mean(gp_preds))
         gp_uncertainty = float(np.mean(gp_std))
@@ -208,8 +205,8 @@ def predict(news: str):
             "final_prediction": final_prediction,
             "confidence": confidence,
             "direction": direction,
-            "drift_detected": drift_result["drift_detected"],   # ✅ NEW
-            "drift_score": drift_result["drift_score"]          # ✅ NEW
+            "drift_detected": drift_result["drift_detected"],
+            "drift_score": drift_result["drift_score"]
         }
 
     except Exception as e:
