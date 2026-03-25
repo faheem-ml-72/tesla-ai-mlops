@@ -3,39 +3,28 @@ import requests
 import yfinance as yf
 import pandas as pd
 import numpy as np
-import plotly.graph_objects as go
 
 # ======================
-# 🎨 PROFESSIONAL UI STYLE
+# 🎨 UI STYLE
 # ======================
 st.set_page_config(page_title="Tesla AI Predictor", layout="wide")
 
 st.markdown("""
 <style>
-
-/* Background */
 .stApp {
     background: linear-gradient(135deg, #0f2027, #203a43, #2c5364);
 }
-
-/* 🔥 FIX TEXT VISIBILITY */
 body, .stMarkdown, .stText, .stMetric {
     color: #ffffff !important;
 }
-
-/* Metric values */
 [data-testid="stMetricValue"] {
     color: #ffffff !important;
     font-size: 28px;
     font-weight: bold;
 }
-
-/* Metric labels */
 [data-testid="stMetricLabel"] {
     color: #cfd8dc !important;
 }
-
-/* Title */
 .title {
     font-size: 42px;
     font-weight: bold;
@@ -43,17 +32,12 @@ body, .stMarkdown, .stText, .stMetric {
     margin-bottom: 10px;
     color: white;
 }
-
-/* Headers */
 h1, h2, h3 {
     color: white !important;
 }
-
-/* Input box */
 input {
     color: black !important;
 }
-
 </style>
 """, unsafe_allow_html=True)
 
@@ -93,18 +77,7 @@ st.markdown("## 🧠 AI Prediction")
 news = st.text_input("Enter Tesla news")
 
 # ======================
-# ⚙️ CONTROLS
-# ======================
-col1, col2 = st.columns(2)
-
-with col1:
-    days = st.slider("Days to Predict", 1, 30, 7)
-
-with col2:
-    selected_date = st.date_input("Start Date")
-
-# ======================
-# 🔮 PREDICT BUTTON
+# 🔮 PREDICT
 # ======================
 if st.button("Predict 🚀"):
 
@@ -114,7 +87,8 @@ if st.button("Predict 🚀"):
 
     API_URL = "https://tesla-ai-mlops.onrender.com/predict"
 
-    response = requests.post(API_URL, params={"news": news})
+    with st.spinner("🤖 AI is analyzing..."):
+        response = requests.post(API_URL, params={"news": news})
 
     if response.status_code != 200:
         st.error(response.text)
@@ -123,9 +97,9 @@ if st.button("Predict 🚀"):
     data = response.json()
 
     # ======================
-    # 📊 TESLA FORECAST TABLE (NEW)
+    # 📊 FORECAST TABLE
     # ======================
-    st.markdown("## 📊 Tesla Forecast Table")
+    st.markdown("## 📊 Tesla Forecast")
 
     future = data["future_prices"]
     uncertainty = data["uncertainty"]
@@ -144,40 +118,47 @@ if st.button("Predict 🚀"):
     st.dataframe(forecast_df, use_container_width=True)
 
     # ======================
-    # 📊 RESULTS
+    # 📊 MODEL OUTPUT
     # ======================
-    st.markdown("## 📊 Results")
+    st.markdown("## 📊 Prediction Results")
 
     col1, col2, col3 = st.columns(3)
 
-    trend = "📉 DOWN" if data["xgboost_prediction"] == 0 else "📈 UP"
+    col1.metric("📈 Direction", data["direction"])
+    col2.metric("🧠 Sentiment", round(data["sentiment_score"], 3))
+    col3.metric("💰 Predicted Price", round(data["final_prediction"], 2))
 
-    col1.metric("Trend", trend)
-    col2.metric("Sentiment", round(data["sentiment_score"], 3))
-    col3.metric("Prediction", round(data["final_prediction"], 3))
+    # ======================
+    # 📊 MODEL INTELLIGENCE (NEW 🔥)
+    # ======================
+    st.markdown("## 📊 Model Intelligence")
+
+    col1, col2 = st.columns(2)
+
+    col1.metric("Confidence", round(data["confidence"], 3))
+    col2.metric("Drift Score", round(data["drift_score"], 4))
+
+    # Drift Alert
+    if data["drift_detected"]:
+        st.warning("⚠️ Market drift detected! Model retraining may be triggered.")
+    else:
+        st.success("✅ No drift detected")
 
     # ======================
     # 🎯 SIGNAL
     # ======================
-    pred = data["final_prediction"]
-
-    if pred > 0.6:
-        st.markdown("### 🟢 STRONG BUY")
-    elif pred > 0.4:
-        st.markdown("### 🟡 HOLD")
+    if data["direction"] == "UP":
+        st.markdown("### 🟢 BUY SIGNAL")
     else:
-        st.markdown("### 🔴 SELL")
+        st.markdown("### 🔴 SELL SIGNAL")
 
     # ======================
-    # 📊 CONFIDENCE
+    # 📊 CONFIDENCE BAR
     # ======================
-    confidence = abs(pred) / 10
-    confidence = min(confidence, 1.0)
-
-    st.progress(confidence)
-    st.write(f"Confidence: {round(confidence, 2)}")
+    st.progress(min(data["confidence"], 1.0))
+    st.write(f"Confidence Score: {round(data['confidence'], 2)}")
 
     # ======================
     # 🧠 MODEL INFO
     # ======================
-    st.caption("Model: XGBoost + Sentiment + Gaussian Process")
+    st.caption("Model: Ensemble (XGBoost + LSTM + Sentiment + Drift-aware system)")

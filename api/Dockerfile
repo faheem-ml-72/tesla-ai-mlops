@@ -4,8 +4,8 @@ WORKDIR /app
 
 COPY . .
 
-RUN pip install --no-cache-dir -r requirements_backend.txt
+RUN pip install --no-cache-dir -r requirements_frontend.txt
 
-ENV PYTHONUNBUFFERED=1
+ENV PORT=8501
 
-CMD ["sh", "-c", "gunicorn -k uvicorn.workers.UvicornWorker api.app:app --bind 0.0.0.0:${PORT} --workers 1"]
+CMD ["streamlit", "run", "streamlit_app.py", "--server.port=8501", "--server.address=0.0.0.0"]
