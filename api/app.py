@@ -39,9 +39,18 @@ def get_lstm_model():
     global lstm_model
     if lstm_model is None:
         path = os.path.join(BASE_DIR, "..", "models", "lstm_model.h5")
+
         if not os.path.exists(path):
-            raise FileNotFoundError("LSTM model not found")
-        lstm_model = load_model(path)
+            print("⚠️ LSTM model not found")
+            return None
+
+        try:
+            # 🔥 FIX: Safe load
+            lstm_model = load_model(path, compile=False)
+        except Exception as e:
+            print("⚠️ LSTM load failed:", str(e))
+            lstm_model = None
+
     return lstm_model
 
 
@@ -130,13 +139,17 @@ def predict(news: str):
         xgb_pred = float(xgb.predict(x_input)[0])
 
         # ======================
-        # 🤖 LSTM
+        # 🤖 LSTM (SAFE)
         # ======================
-        lstm_input = df[FEATURES].tail(30).values.reshape(1, 30, len(FEATURES))
-        lstm_pred = float(lstm.predict(lstm_input, verbose=0)[0][0])
+        if lstm is not None:
+            lstm_input = df[FEATURES].tail(30).values.reshape(1, 30, len(FEATURES))
+            lstm_pred = float(lstm.predict(lstm_input, verbose=0)[0][0])
+        else:
+            print("⚠️ Using fallback for LSTM")
+            lstm_pred = xgb_pred  # fallback
 
         # ======================
-        # ⚡ Fast "GP Approximation"
+        # ⚡ Fast GP Approximation
         # ======================
         close_prices = df['Close'].values[-100:]
 
