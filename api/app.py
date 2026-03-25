@@ -14,6 +14,7 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.abspath(os.path.join(BASE_DIR, "..")))
 
 from utils.sentiment import get_sentiment_score
+from utils.drift import detect_drift   # ✅ NEW
 
 app = FastAPI(title="Tesla AI MLOps API 🚀")
 
@@ -49,7 +50,7 @@ def get_lstm_model():
 # ======================
 def normalize(value, min_val, max_val):
     if max_val - min_val == 0:
-        return 0.5  # fallback
+        return 0.5
     return (value - min_val) / (max_val - min_val)
 
 
@@ -101,6 +102,19 @@ def predict(news: str):
 
         if df.empty or len(df) < 50:
             raise HTTPException(status_code=400, detail="Not enough data")
+
+        # ======================
+        # 📉 Drift Detection (NEW)
+        # ======================
+        if len(df) < 200:
+            drift_result = {
+                "drift_detected": False,
+                "drift_score": 0.0
+            }
+        else:
+            historical = df['Close'].values[-200:-100]
+            recent = df['Close'].values[-100:]
+            drift_result = detect_drift(historical, recent)
 
         # ======================
         # 📊 XGBoost
@@ -187,7 +201,9 @@ def predict(news: str):
             "uncertainty": gp_std.tolist(),
             "final_prediction": final_prediction,
             "confidence": confidence,
-            "direction": direction
+            "direction": direction,
+            "drift_detected": drift_result["drift_detected"],   # ✅ NEW
+            "drift_score": drift_result["drift_score"]          # ✅ NEW
         }
 
     except Exception as e:
