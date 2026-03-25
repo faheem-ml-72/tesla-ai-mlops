@@ -4,7 +4,6 @@ import numpy as np
 import joblib
 import sys
 import os
-import subprocess
 from tensorflow.keras.models import load_model
 
 # ======================
@@ -45,7 +44,6 @@ def get_lstm_model():
             return None
 
         try:
-            # 🔥 FIX: Safe load
             lstm_model = load_model(path, compile=False)
         except Exception as e:
             print("⚠️ LSTM load failed:", str(e))
@@ -123,14 +121,10 @@ def predict(news: str):
             drift_result = detect_drift(historical, recent)
 
         # ======================
-        # 🔄 Auto Retrain Trigger
+        # 🔄 SAFE Drift Log (NO retrain here)
         # ======================
         if drift_result["drift_detected"]:
-            print("⚠️ Drift detected! Triggering retraining...")
-            try:
-                subprocess.Popen(["python", "training/retrain.py"])
-            except Exception as e:
-                print("Retraining failed:", str(e))
+            print("⚠️ Drift detected (handled by CI/CD)")
 
         # ======================
         # 📊 XGBoost
@@ -146,10 +140,10 @@ def predict(news: str):
             lstm_pred = float(lstm.predict(lstm_input, verbose=0)[0][0])
         else:
             print("⚠️ Using fallback for LSTM")
-            lstm_pred = xgb_pred  # fallback
+            lstm_pred = xgb_pred
 
         # ======================
-        # ⚡ Fast GP Approximation
+        # ⚡ Fast Approximation
         # ======================
         close_prices = df['Close'].values[-100:]
 
@@ -168,8 +162,7 @@ def predict(news: str):
         # ======================
         # 🔄 Normalize
         # ======================
-        recent_prices = df['Close'].values[-100:]
-        min_p, max_p = np.min(recent_prices), np.max(recent_prices)
+        min_p, max_p = np.min(close_prices), np.max(close_prices)
 
         xgb_norm = normalize(xgb_pred, min_p, max_p)
         lstm_norm = normalize(lstm_pred, min_p, max_p)
@@ -223,6 +216,8 @@ def predict(news: str):
         }
 
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 
