@@ -5,24 +5,36 @@ from sklearn.gaussian_process import GaussianProcessRegressor
 import joblib
 import sys
 import os
+from tensorflow.keras.models import load_model
 
-# Fix path
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+# ======================
+# 🔧 Fix path
+# ======================
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(_file_), "..")))
 
 from utils.sentiment import get_sentiment_score
 
 app = FastAPI()
 
 # ======================
-# 🔹 Lazy Load Model
+# 🔹 Lazy Load Models
 # ======================
-model = None
+xgb_model = None
+lstm_model = None
 
-def get_model():
-    global model
-    if model is None:
-        model = joblib.load("models/latest_model.pkl")
-    return model
+
+def get_xgb_model():
+    global xgb_model
+    if xgb_model is None:
+        xgb_model = joblib.load("models/latest_model.pkl")
+    return xgb_model
+
+
+def get_lstm_model():
+    global lstm_model
+    if lstm_model is None:
+        lstm_model = load_model("models/lstm_model.h5")
+    return lstm_model
 
 
 # ======================
@@ -32,7 +44,6 @@ FEATURES = [
     'Open', 'High', 'Low', 'Close', 'Volume',
     'EMA_10', 'EMA_50', 'RSI', 'MACD', 'Signal_Line'
 ]
-
 
 # ======================
 # 🔹 Home Endpoint
@@ -48,10 +59,15 @@ def home():
 @app.post("/predict")
 def predict(news: str):
     try:
-        # Load model
-        model = get_model()
+        # ======================
+        # 📥 Load Models
+        # ======================
+        xgb_model = get_xgb_model()
+        lstm_model = get_lstm_model()
 
-        # Load data
+        # ======================
+        # 📊 Load Data
+        # ======================
         df = pd.read_csv("data/tesla_features.csv", index_col=0)
 
         if df.empty:
@@ -61,16 +77,19 @@ def predict(news: str):
         # 📊 XGBoost Prediction
         # ======================
         x_input = df[FEATURES].iloc[-1:].values
-        # 🔍 DEBUG START
-        print("Input shape:", x_input.shape)
-        print("Input values:", x_input)
-        # 🔍 DEBUG END
+        xgb_pred = xgb_model.predict(x_input)[0]
 
-        xgb_pred = model.predict(x_input)[0]
+        # ======================
+        # 🤖 LSTM Prediction
+        # ======================
+        lstm_input = df[FEATURES].tail(30).values
 
-        # 🔍 DEBUG START
-        print("Prediction:", xgb_pred)
-        # 🔍 DEBUG END
+        if lstm_input.shape[0] < 30:
+            raise HTTPException(status_code=400, detail="Not enough data for LSTM")
+
+        lstm_input = lstm_input.reshape(1, 30, len(FEATURES))
+        lstm_pred = float(lstm_model.predict(lstm_input, verbose=0)[0][0])
+
         # ======================
         # 📈 Gaussian Process
         # ======================
@@ -93,12 +112,13 @@ def predict(news: str):
         sentiment_score = get_sentiment_score(news)
 
         # ======================
-        # 🚀 Final Ensemble
+        # 🚀 Ensemble Prediction
         # ======================
         final_prediction = (
-            0.6 * xgb_pred +
-            0.2 * sentiment_score +
-            0.2 * np.mean(gp_preds)
+            0.4 * xgb_pred +
+            0.3 * lstm_pred +
+            0.15 * sentiment_score +
+            0.15 * np.mean(gp_preds)
         )
 
         # ======================
@@ -106,6 +126,7 @@ def predict(news: str):
         # ======================
         return {
             "xgboost_prediction": float(xgb_pred),
+            "lstm_prediction": float(lstm_pred),
             "sentiment_score": float(sentiment_score),
             "future_prices": gp_preds.tolist(),
             "uncertainty": gp_std.tolist(),
@@ -114,6 +135,9 @@ def predict(news: str):
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-    
-    # add this in api/app.py
-print("Redeploy triggered")
+
+
+# ======================
+# 🔥 Debug (optional)
+# ======================
+print("🚀 API Loaded Successfully")
