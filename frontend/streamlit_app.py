@@ -3,9 +3,10 @@ import requests
 import yfinance as yf
 import pandas as pd
 import numpy as np
+import plotly.graph_objects as go
 
 # ======================
-# 🎨 UI STYLE
+# 🎨 UI CONFIG
 # ======================
 st.set_page_config(page_title="Tesla AI Predictor", layout="wide")
 
@@ -29,14 +30,7 @@ body, .stMarkdown, .stText, .stMetric {
     font-size: 42px;
     font-weight: bold;
     text-align: center;
-    margin-bottom: 10px;
     color: white;
-}
-h1, h2, h3 {
-    color: white !important;
-}
-input {
-    color: black !important;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -55,7 +49,7 @@ st.markdown("## 📈 Tesla Stock Price")
 st.line_chart(data_chart["Close"])
 
 # ======================
-# 📊 KPI CARDS
+# 📊 KPI
 # ======================
 col1, col2, col3 = st.columns(3)
 
@@ -87,78 +81,96 @@ if st.button("Predict 🚀"):
 
     API_URL = "https://tesla-ai-mlops.onrender.com/predict"
 
-    with st.spinner("🤖 AI is analyzing..."):
+    try:
         response = requests.post(API_URL, params={"news": news})
-
-    if response.status_code != 200:
-        st.error(response.text)
+        data = response.json()
+    except:
+        st.error("API connection failed")
         st.stop()
 
-    data = response.json()
+    if "error" in data:
+        st.error(data["error"])
+        st.stop()
 
     # ======================
-    # 📊 FORECAST TABLE
+    # 📊 RESULTS
     # ======================
-    st.markdown("## 📊 Tesla Forecast")
-
-    future = data["future_prices"]
-    uncertainty = data["uncertainty"]
-
-    future_dates = pd.date_range(
-        start=pd.Timestamp.today(),
-        periods=len(future)
-    )
-
-    forecast_df = pd.DataFrame({
-        "Date": future_dates,
-        "Predicted Price": np.round(future, 2),
-        "Uncertainty": np.round(uncertainty, 4)
-    })
-
-    st.dataframe(forecast_df, use_container_width=True)
-
-    # ======================
-    # 📊 MODEL OUTPUT
-    # ======================
-    st.markdown("## 📊 Prediction Results")
+    st.markdown("## 📊 Prediction Result")
 
     col1, col2, col3 = st.columns(3)
 
-    col1.metric("📈 Direction", data["direction"])
-    col2.metric("🧠 Sentiment", round(data["sentiment_score"], 3))
-    col3.metric("💰 Predicted Price", round(data["final_prediction"], 2))
-
-    # ======================
-    # 📊 MODEL INTELLIGENCE (NEW 🔥)
-    # ======================
-    st.markdown("## 📊 Model Intelligence")
-
-    col1, col2 = st.columns(2)
-
-    col1.metric("Confidence", round(data["confidence"], 3))
-    col2.metric("Drift Score", round(data["drift_score"], 4))
-
-    # Drift Alert
-    if data["drift_detected"]:
-        st.warning("⚠️ Market drift detected! Model retraining may be triggered.")
-    else:
-        st.success("✅ No drift detected")
+    col1.metric("📈 Prediction", round(data["final_prediction"], 2))
+    col2.metric("🎯 Confidence", round(data["confidence"], 3))
+    col3.metric("📊 Direction", data["direction"])
 
     # ======================
     # 🎯 SIGNAL
     # ======================
     if data["direction"] == "UP":
-        st.markdown("### 🟢 BUY SIGNAL")
+        st.success("🟢 Market looks bullish")
     else:
-        st.markdown("### 🔴 SELL SIGNAL")
+        st.error("🔴 Market looks bearish")
 
     # ======================
-    # 📊 CONFIDENCE BAR
+    # 📊 FORECAST GRAPH (NEW 🔥)
     # ======================
-    st.progress(min(data["confidence"], 1.0))
-    st.write(f"Confidence Score: {round(data['confidence'], 2)}")
+    st.markdown("## 📈 Tesla Forecast")
+
+    future_prices = [data["final_prediction"]] * 7
+    uncertainty = [1 - data["confidence"]] * 7
+
+    future_dates = pd.date_range(
+        start=pd.Timestamp.today(),
+        periods=7
+    )
+
+    fig = go.Figure()
+
+    # Prediction line
+    fig.add_trace(go.Scatter(
+        x=future_dates,
+        y=future_prices,
+        mode='lines+markers',
+        name='Prediction'
+    ))
+
+    # Uncertainty band
+    fig.add_trace(go.Scatter(
+        x=future_dates,
+        y=np.array(future_prices) + np.array(uncertainty),
+        mode='lines',
+        name='Upper Bound',
+        line=dict(dash='dash')
+    ))
+
+    fig.add_trace(go.Scatter(
+        x=future_dates,
+        y=np.array(future_prices) - np.array(uncertainty),
+        mode='lines',
+        name='Lower Bound',
+        line=dict(dash='dash'),
+        fill='tonexty'
+    ))
+
+    st.plotly_chart(fig, use_container_width=True)
 
     # ======================
-    # 🧠 MODEL INFO
+    # 🧠 MODEL HEALTH
     # ======================
-    st.caption("Model: Ensemble (XGBoost + LSTM + Sentiment + Drift-aware system)")
+    st.markdown("## 🧠 Model Health")
+
+    drift = data["drift_detected"]
+    drift_score = data["drift_score"]
+
+    st.write("Drift Detected:", drift)
+    st.write("Drift Score:", round(drift_score, 4))
+
+    if drift:
+        st.warning("⚠️ Model drift detected — retraining recommended")
+    else:
+        st.success("✅ Model stable")
+
+    # ======================
+    # 📌 FOOTER
+    # ======================
+    st.caption("Model: XGBoost + LSTM + Sentiment + Drift Detection + Forecast")
