@@ -8,14 +8,14 @@ import os
 from tensorflow.keras.models import load_model
 
 # ======================
-# 🔧 Fix path (CRITICAL FIX)
+# 🔧 Base Path Fix
 # ======================
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.abspath(os.path.join(BASE_DIR, "..")))
 
 from utils.sentiment import get_sentiment_score
 
-app = FastAPI()
+app = FastAPI(title="Tesla AI MLOps API 🚀")
 
 # ======================
 # 🔹 Lazy Load Models
@@ -27,14 +27,20 @@ lstm_model = None
 def get_xgb_model():
     global xgb_model
     if xgb_model is None:
-        xgb_model = joblib.load(os.path.join(BASE_DIR, "..", "models", "latest_model.pkl"))
+        path = os.path.join(BASE_DIR, "..", "models", "latest_model.pkl")
+        if not os.path.exists(path):
+            raise FileNotFoundError("XGBoost model not found")
+        xgb_model = joblib.load(path)
     return xgb_model
 
 
 def get_lstm_model():
     global lstm_model
     if lstm_model is None:
-        lstm_model = load_model(os.path.join(BASE_DIR, "..", "models", "lstm_model.h5"))
+        path = os.path.join(BASE_DIR, "..", "models", "lstm_model.h5")
+        if not os.path.exists(path):
+            raise FileNotFoundError("LSTM model not found")
+        lstm_model = load_model(path)
     return lstm_model
 
 
@@ -42,7 +48,9 @@ def get_lstm_model():
 # 🔹 Normalize Function
 # ======================
 def normalize(value, min_val, max_val):
-    return (value - min_val) / (max_val - min_val + 1e-8)
+    if max_val - min_val == 0:
+        return 0.5  # fallback
+    return (value - min_val) / (max_val - min_val)
 
 
 # ======================
@@ -55,7 +63,15 @@ FEATURES = [
 
 
 # ======================
-# 🔹 Home Endpoint
+# 🔹 Health Check
+# ======================
+@app.get("/health")
+def health():
+    return {"status": "ok"}
+
+
+# ======================
+# 🔹 Home
 # ======================
 @app.get("/")
 def home():
@@ -63,7 +79,7 @@ def home():
 
 
 # ======================
-# 🔹 Prediction Endpoint
+# 🔹 Prediction
 # ======================
 @app.post("/predict")
 def predict(news: str):
@@ -71,33 +87,32 @@ def predict(news: str):
         # ======================
         # 📥 Load Models
         # ======================
-        xgb_model = get_xgb_model()
-        lstm_model = get_lstm_model()
+        xgb = get_xgb_model()
+        lstm = get_lstm_model()
 
         # ======================
         # 📊 Load Data
         # ======================
-        df = pd.read_csv(os.path.join(BASE_DIR, "..", "data", "tesla_features.csv"), index_col=0)
+        data_path = os.path.join(BASE_DIR, "..", "data", "tesla_features.csv")
+        if not os.path.exists(data_path):
+            raise HTTPException(status_code=500, detail="Data file not found")
 
-        if df.empty:
-            raise HTTPException(status_code=400, detail="Data file is empty")
+        df = pd.read_csv(data_path, index_col=0)
+
+        if df.empty or len(df) < 50:
+            raise HTTPException(status_code=400, detail="Not enough data")
 
         # ======================
         # 📊 XGBoost
         # ======================
         x_input = df[FEATURES].iloc[-1:].values
-        xgb_pred = float(xgb_model.predict(x_input)[0])
+        xgb_pred = float(xgb.predict(x_input)[0])
 
         # ======================
         # 🤖 LSTM
         # ======================
-        lstm_input = df[FEATURES].tail(30).values
-
-        if lstm_input.shape[0] < 30:
-            raise HTTPException(status_code=400, detail="Not enough data for LSTM")
-
-        lstm_input = lstm_input.reshape(1, 30, len(FEATURES))
-        lstm_pred = float(lstm_model.predict(lstm_input, verbose=0)[0][0])
+        lstm_input = df[FEATURES].tail(30).values.reshape(1, 30, len(FEATURES))
+        lstm_pred = float(lstm.predict(lstm_input, verbose=0)[0][0])
 
         # ======================
         # 📈 Gaussian Process
@@ -105,10 +120,8 @@ def predict(news: str):
         close_prices = df['Close'].values[-100:]
 
         X = np.arange(len(close_prices)).reshape(-1, 1)
-        y = close_prices
-
         gp = GaussianProcessRegressor()
-        gp.fit(X, y)
+        gp.fit(X, close_prices)
 
         future_x = np.arange(len(close_prices), len(close_prices) + 7).reshape(-1, 1)
         gp_preds, gp_std = gp.predict(future_x, return_std=True)
@@ -123,7 +136,7 @@ def predict(news: str):
         sentiment_norm = (sentiment_score + 1) / 2
 
         # ======================
-        # 🔄 Normalize Predictions
+        # 🔄 Normalize
         # ======================
         recent_prices = df['Close'].values[-100:]
         min_p, max_p = np.min(recent_prices), np.max(recent_prices)
@@ -135,9 +148,7 @@ def predict(news: str):
         # ======================
         # 🧠 Dynamic Weights
         # ======================
-        w_xgb = 0.35
-        w_lstm = 0.35
-        w_sentiment = 0.1
+        w_xgb, w_lstm, w_sentiment = 0.35, 0.35, 0.1
         w_gp = 0.2 if gp_uncertainty < 5 else 0.1
 
         total = w_xgb + w_lstm + w_sentiment + w_gp
@@ -147,7 +158,7 @@ def predict(news: str):
         w_gp /= total
 
         # ======================
-        # 🚀 Final Ensemble
+        # 🚀 Ensemble
         # ======================
         final_norm = (
             w_xgb * xgb_norm +
@@ -156,14 +167,14 @@ def predict(news: str):
             w_gp * gp_norm
         )
 
-        final_prediction = final_norm * (max_p - min_p) + min_p
+        final_prediction = float(final_norm * (max_p - min_p) + min_p)
 
         # ======================
-        # 📊 Direction + Confidence
+        # 📊 Direction & Confidence
         # ======================
         last_price = df['Close'].iloc[-1]
         direction = "UP" if final_prediction > last_price else "DOWN"
-        confidence = 1 / (1 + gp_uncertainty)
+        confidence = float(1 / (1 + gp_uncertainty))
 
         # ======================
         # 📤 Response
@@ -174,12 +185,13 @@ def predict(news: str):
             "sentiment_score": sentiment_score,
             "future_prices": gp_preds.tolist(),
             "uncertainty": gp_std.tolist(),
-            "final_prediction": float(final_prediction),
-            "confidence": float(confidence),
+            "final_prediction": final_prediction,
+            "confidence": confidence,
             "direction": direction
         }
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 print("🚀 API Loaded Successfully")
